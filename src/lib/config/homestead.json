@@ -1,0 +1,59 @@
+{
+  "key": "97",
+  "chainId": 97,
+  "chainName": "BSCTEST",
+  "name": "BSC Testnet",
+  "shortName": "Testnet",
+  "network": "homestead",
+  "unknown": false,
+  "rpc": "https://testnet.infura.io/v3/daaa68ec242643719749dd1caba2fc66",
+  "ws": "wss://testnet.infura.io/ws/v3/daaa68ec242643719749dd1caba2fc66",
+  "loggingRpc": "https://bsc-mainnet.alchemyapi.io/v2/cQGZUiTLRCFsQS7kbRxPJK4eH4fTTu88",
+  "explorer": "https://testnet.bscscan.com/",
+  "subgraph": "https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-v2",
+  "poolsUrlV1": "https://storageapi.fleek.co/balancer-bucket/balancer-exchange/pools",
+  "poolsUrlV2": "https://storageapi.fleek.co/johngrantuk-team-bucket/poolsV2.json",
+  "supportsEIP1559": true,
+  "nativeAsset": {
+    "name": "BNB",
+    "address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "symbol": "BNB",
+    "decimals": 18,
+    "deeplinkId": "bnb",
+    "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png"
+  },
+  "addresses": {
+    "bFactory": "0xD41913762dBaE7325EC22ee3A6a231258D2F1974",
+    "bActions": "0x2a2c3820717dF9E8FD5Fcf637bB424b3bE8e74d2",
+    "dsProxyRegistry": "0x4b40907a5238C1Dd6F6C09038956b15eB292feBa",
+    "exchangeProxy": "0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21",
+    "merkleRedeem": "0xe55DbD2484fb7df0A7D9727184c30AE338246aeb",
+    "multicall": "0x8B8f207dE2C71744aeC0DaE95AE8a2D296b5659f",
+    "authorizer": "0xA331D84eC860Bf466b4CdCcFb4aC09a1B43F3aE6",
+    "vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+    "weightedPoolFactory": "0x8E9aa87E45e92bad84D5F8DD1bff34Fb92637dE9",
+    "stablePoolFactory": "0xc66Ba2B6595D3613CCab350C886aCE23866EDe24",
+    "tokenFactory": "",
+    "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "stETH": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    "wstETH": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+    "lidoRelayer": "0xdcdbf71A870cc60C6F9B621E28a7D3Ffd6Dd4965",
+    "MockFlashLoanReceiver": "",
+    "balancerHelpers": "0x5aDDCCa35b7A0D07C74063c48700C8590E87864E"
+  },
+  "strategies": {
+    "0": {
+      "type": "0",
+      "name": "stablePool"
+    },
+    "1": {
+      "type": "1",
+      "name": "weightedPool"
+    },
+    "2": {
+      "type": "2",
+      "name": "weightedPool"
+    }
+  },
+  "supportsElementPools": true
+}

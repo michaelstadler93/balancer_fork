@@ -1,0 +1,364 @@
+<template>
+  <BalCard class="relative" id="tradecard" :shadow="tradeCardShadow" :no-border="!darkMode" :square="true">
+    <template v-slot:header>
+      <div class="w-full flex items-center justify-between">
+        <div>
+          <h6 class="font-bold text-white">{{ title }}</h6>
+           <span class="text-gray-500">Trade tokens in an instant</span>
+        </div>
+        
+        <TradeSettingsPopover :context="TradeSettingsContext.trade" class="bg-transparent" />
+      </div>
+    </template>
+    <div>
+      <TradePair
+        v-model:tokenInAmount="tokenInAmount"
+        v-model:tokenInAddress="tokenInAddress"
+        v-model:tokenOutAmount="tokenOutAmount"
+        v-model:tokenOutAddress="tokenOutAddress"
+        v-model:exactIn="exactIn"
+        :priceImpact="priceImpact"
+        @amountChange="handleAmountChange"
+        class="mb-4"
+      />
+      <GasReimbursement
+        class="mb-5"
+        :address-in="tokenInAddress"
+        :address-out="tokenOutAddress"
+        :sorReturn="sorReturn"
+      />
+      <BalAlert
+        v-if="error"
+        class="mb-4"
+        type="error"
+        size="sm"
+        :title="error.header"
+        :description="error.body"
+        :action-label="error.label"
+        block
+        @actionClick="handleErrorButtonClick"
+      />
+      <BalBtn
+      id="myconfirm1"
+        v-if="poolsLoading || isLoadingApprovals"
+        :loading="true"
+        :loading-label="$t('loading')"
+        block
+      />
+      <BalBtn
+        id="myconfirm2"
+        v-else
+        :label="'Preview trade'"
+        :disabled="tradeDisabled"
+        :loading-label="$t('confirming')"
+        block
+        @click.prevent="showTradePreviewModal"
+      />
+      <TradeRoute
+        class="mt-5"
+        :address-in="tokenInAddress"
+        :amount-in="tokenInAmount"
+        :address-out="tokenOutAddress"
+        :amount-out="tokenOutAmount"
+        :pools="pools"
+        :sor-return="sorReturn"
+      />
+    </div>
+    <SuccessOverlay
+      v-if="tradeSuccess"
+      :title="$t('tradeSettled')"
+      :description="$t('tradeSuccess')"
+      :closeLabel="$t('close')"
+      :explorer-link="explorer.txLink(txHash)"
+      @close="tradeSuccess = false"
+    />
+  </BalCard>
+  <teleport to="#modal">
+    <TradePreviewModal
+      v-if="modalTradePreviewIsOpen"
+      :is-v1-swap="sorReturn.isV1swap"
+      :address-in="tokenInAddress"
+      :amount-in="tokenInAmount"
+      :address-out="tokenOutAddress"
+      :amount-out="tokenOutAmount"
+      :trading="trading"
+      @trade="trade"
+      @close="modalTradePreviewIsOpen = false"
+    />
+  </teleport>
+</template>
+
+<script lang="ts">
+import { isRequired } from '@/lib/utils/validations';
+import { ref, defineComponent, computed, watch } from 'vue';
+import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
+import { isAddress, getAddress } from '@ethersproject/address';
+
+import useTokenApproval from '@/composables/trade/useTokenApproval';
+import useValidation, {
+  TradeValidation
+} from '@/composables/trade/useValidation';
+import useSor from '@/composables/trade/useSor';
+
+import SuccessOverlay from '@/components/cards/SuccessOverlay.vue';
+import TradePair from '@/components/cards/TradeCard/TradePair.vue';
+import TradePreviewModal from '@/components/modals/TradePreviewModal.vue';
+import TradeRoute from '@/components/cards/TradeCard/TradeRoute.vue';
+import TradeSettingsPopover, {
+  TradeSettingsContext
+} from '@/components/popovers/TradeSettingsPopover.vue';
+import GasReimbursement from './GasReimbursement.vue';
+import { useI18n } from 'vue-i18n';
+import useWeb3 from '@/services/web3/useWeb3';
+import useBreakpoints from '@/composables/useBreakpoints';
+import useTokens from '@/composables/useTokens';
+import useDarkMode from '@/composables/useDarkMode';
+import { configService } from '@/services/config/config.service';
+
+import { getWrapAction, WrapType } from '@/lib/utils/balancer/wrapper';
+
+const { nativeAsset } = configService.network;
+
+export default defineComponent({
+  components: {
+    SuccessOverlay,
+    TradePair,
+    TradePreviewModal,
+    TradeRoute,
+    TradeSettingsPopover,
+    GasReimbursement
+  },
+
+  setup() {
+    const highPiAccepted = ref(false);
+    const store = useStore();
+    const router = useRouter();
+    const { explorerLinks, isMismatchedNetwork } = useWeb3();
+    const { t } = useI18n();
+    const { bp } = useBreakpoints();
+
+    const { tokens } = useTokens();
+    const { userNetworkConfig } = useWeb3();
+    const { darkMode } = useDarkMode();
+
+    const exactIn = ref(true);
+    const tokenInAddress = ref('');
+    const tokenInAmount = ref('');
+    const tokenOutAddress = ref('');
+    const tokenOutAmount = ref('');
+    const tradeSuccess = ref(false);
+    const txHash = ref('');
+    const modalTradePreviewIsOpen = ref(false);
+
+    const slippageBufferRate = computed(() =>
+      parseFloat(store.state.app.slippage)
+    );
+
+    const tokenIn = computed(() => tokens.value[tokenInAddress.value]);
+
+    const tokenOut = computed(() => tokens.value[tokenOutAddress.value]);
+
+    const liquiditySelection = computed(() => store.state.app.tradeLiquidity);
+
+    const tradeCardShadow = computed(() => {
+      switch (bp.value) {
+        case 'xs':
+          return 'none';
+        case 'sm':
+          return 'lg';
+        default:
+          return 'xl';
+      }
+    });
+
+    const wrapType = computed(() =>
+      getWrapAction(tokenInAddress.value, tokenOutAddress.value)
+    );
+    const isWrap = computed(() => wrapType.value === WrapType.Wrap);
+    const isUnwrap = computed(() => wrapType.value === WrapType.Unwrap);
+
+    const isHighPriceImpact = computed(() => {
+      return priceImpact.value >= 0.05 && !highPiAccepted.value;
+    });
+
+    const tradeDisabled = computed(() => {
+      if (isMismatchedNetwork.value) return true;
+      if (errorMessage.value !== TradeValidation.VALID) return true;
+      if (isHighPriceImpact.value) return true;
+      return false;
+    });
+
+    // COMPOSABLES
+    const { isLoading: isLoadingApprovals } = useTokenApproval(
+      tokenInAddress,
+      tokenInAmount,
+      tokens
+    );
+    const {
+      trading,
+      trade,
+      initSor,
+      handleAmountChange,
+      priceImpact,
+      sorReturn,
+      latestTxHash,
+      pools,
+      fetchPools,
+      poolsLoading
+    } = useSor({
+      exactIn,
+      tokenInAddressInput: tokenInAddress,
+      tokenInAmountInput: tokenInAmount,
+      tokenOutAddressInput: tokenOutAddress,
+      tokenOutAmountInput: tokenOutAmount,
+      tokens,
+      wrapType,
+      tokenIn,
+      tokenOut,
+      slippageBufferRate
+    });
+    const { errorMessage } = useValidation(
+      tokenInAddress,
+      tokenInAmount,
+      tokenOutAddress,
+      tokenOutAmount
+    );
+
+    const title = computed(() => {
+      if (isWrap.value) return t('wrap');
+      if (isUnwrap.value) return t('unwrap');
+      return t('EXCNANGE');
+    });
+
+    const error = computed(() => {
+      if (isHighPriceImpact.value) {
+        return {
+          header: t('highPriceImpact'),
+          body: t('highPriceImpactDetailed'),
+          label: t('accept')
+        };
+      }
+      switch (errorMessage.value) {
+        case TradeValidation.NO_NATIVE_ASSET:
+          return {
+            header: t('noNativeAsset', [nativeAsset.symbol]),
+            body: t('noNativeAssetDetailed', [
+              nativeAsset.symbol,
+              configService.network.chainName
+            ])
+          };
+        case TradeValidation.NO_BALANCE:
+          return {
+            header: t('insufficientBalance'),
+            body: t('insufficientBalanceDetailed')
+          };
+        case TradeValidation.NO_LIQUIDITY:
+          return {
+            header: t('insufficientLiquidity'),
+            body: t('insufficientLiquidityDetailed')
+          };
+        default:
+          return undefined;
+      }
+    });
+
+    function handleErrorButtonClick() {
+      if (isHighPriceImpact.value) {
+        highPiAccepted.value = true;
+      }
+    }
+
+    async function populateInitialTokens(): Promise<void> {
+      let assetIn = router.currentRoute.value.params.assetIn as string;
+      if (assetIn === nativeAsset.deeplinkId) assetIn = nativeAsset.address;
+      else if (isAddress(assetIn)) assetIn = getAddress(assetIn);
+      let assetOut = router.currentRoute.value.params.assetOut as string;
+      if (assetOut === nativeAsset.deeplinkId) assetOut = nativeAsset.address;
+      else if (isAddress(assetOut)) assetOut = getAddress(assetOut);
+
+      tokenInAddress.value = assetIn || store.state.trade.inputAsset;
+      tokenOutAddress.value = assetOut || '';
+    }
+
+    function showTradePreviewModal() {
+      modalTradePreviewIsOpen.value = true;
+    }
+
+    watch(userNetworkConfig, async () => {
+      await initSor();
+      await handleAmountChange();
+    });
+
+    watch(tokenInAddress, () => {
+      store.commit('trade/setInputAsset', tokenInAddress.value);
+      handleAmountChange();
+    });
+
+    watch(tokenOutAddress, () => {
+      store.commit('trade/setOutputAsset', tokenOutAddress.value);
+      handleAmountChange();
+    });
+
+    watch(liquiditySelection, () => {
+      // When the liquidity type is changed we need to update the trade to use that selection
+      handleAmountChange();
+    });
+
+    watch(latestTxHash, () => {
+      // Refresh SOR pools
+      fetchPools();
+      txHash.value = latestTxHash.value;
+      tradeSuccess.value = true;
+      modalTradePreviewIsOpen.value = false;
+    });
+
+    populateInitialTokens();
+
+    return {
+      highPiAccepted,
+      title,
+      error,
+      handleErrorButtonClick,
+      tokenInAddress,
+      tokenInAmount,
+      tokenOutAddress,
+      tokenOutAmount,
+      exactIn,
+      handleAmountChange,
+      errorMessage,
+      sorReturn,
+      pools,
+      trading,
+      trade,
+      txHash,
+      modalTradePreviewIsOpen,
+      tradeSuccess,
+      priceImpact,
+      isRequired,
+      tradeDisabled,
+      TradeSettingsContext,
+      poolsLoading,
+      showTradePreviewModal,
+      isLoadingApprovals,
+      bp,
+      darkMode,
+      tradeCardShadow,
+      explorer: explorerLinks
+    };
+  }
+});
+</script>
+<style>
+#tradecard{
+  border-style: solid;
+  border-color: #154259;
+  border-width: 4px;
+  background-color:#0f2a3d;
+  padding-bottom: 20px;
+  padding-top: 20px;
+}
+#myconfirm1,#myconfirm1{
+  background-color:#5ce1e6
+}
+</style>
